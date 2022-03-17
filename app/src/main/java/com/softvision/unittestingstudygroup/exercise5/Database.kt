@@ -33,7 +33,7 @@ interface AlbumDao {
     fun getAlbumsSorted(): List<DatabaseAlbum>
 
     @Insert
-    suspend fun insertAlbums(albums: List<DatabaseAlbum>)
+    fun insertAlbums(albums: List<DatabaseAlbum>)
 }
 
 @Database(exportSchema = false, version = 1, entities = [DatabaseAlbum::class])
