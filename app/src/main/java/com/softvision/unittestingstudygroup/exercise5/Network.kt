@@ -8,6 +8,9 @@ import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.GET
+import java.io.IOException
+import java.util.concurrent.TimeoutException
+import kotlin.jvm.Throws
 
 data class NetworkAlbum(
     @Json(name = "userId") val userId: Int,
@@ -23,6 +26,7 @@ fun List<NetworkAlbum>.asDomainModels(): List<Album> {
 
 interface AlbumRestApi {
     @GET("albums")
+    @Throws(TimeoutException::class, IOException::class)
     fun fetchAlbums(): Response<List<NetworkAlbum>>
 }
 

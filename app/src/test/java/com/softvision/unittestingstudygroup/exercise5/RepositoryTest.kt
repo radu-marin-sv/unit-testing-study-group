@@ -1,22 +1,62 @@
 package com.softvision.unittestingstudygroup.exercise5
 
+import com.nhaarman.mockitokotlin2.*
 import okhttp3.MediaType
 import okhttp3.ResponseBody
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.MatcherAssert.assertThat
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.anyList
+import org.mockito.InjectMocks
+import org.mockito.Mock
+import org.mockito.junit.MockitoJUnitRunner
 import retrofit2.Response
 import java.io.IOException
 import java.util.concurrent.TimeoutException
 
+@RunWith(MockitoJUnitRunner::class)
 class RepositoryTest {
+
+    @Mock
+    private lateinit var albumRestApi: AlbumRestApi
+    @Mock
+    private lateinit var albumDao: AlbumDao
+
+    @InjectMocks
     private lateinit var repository: Repository
+
+    @Test
+    fun `given a server replied with data and we don't have nothing stored, when fetching data, then the fetch methods are called in expected order`() {
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Response.success(NETWORK_ALBUMS))
+
+        repository.fetchOnlyFirst()
+
+        val fetchFirstOrder = inOrder(albumDao, albumRestApi)
+        fetchFirstOrder.verify(albumDao).getAlbumsSorted()
+        fetchFirstOrder.verify(albumRestApi).fetchAlbums()
+        fetchFirstOrder.verify(albumDao).insertAlbums(anyList())
+    }
+
+    @Test
+    fun `given, when, then`() {
+        // given
+        whenever(albumDao.getAlbumByUserId(any()))
+            .thenReturn(DATABASE_ALBUMS, DATABASE_ALBUMS_USER1, DATABASE_ALBUMS_USER2)
+
+        // when
+        val result = repository.fetchAlbumsByUserIdList(listOf(0, 1, 2))
+
+        // then
+        val albumList =listOf(DOMAIN_ALBUMS, DOMAIN_ALBUMS_USER1, DOMAIN_ALBUMS_USER2).flatten()
+        assertThat(result, equalTo(Repository.Result.Success(albumList, true)))
+    }
 
     @Test
     fun `given the server replied with data, when fetching data, the the data will be successfully fetched`() {
         // given
-        val dao = AlbumDaoMock()
-        repository = Repository(createRestApiStub { Response.success(NETWORK_ALBUMS) }, dao)
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Response.success(NETWORK_ALBUMS))
 
         // when
         val result = repository.fetch()
@@ -25,17 +65,16 @@ class RepositoryTest {
         assertThat(result, equalTo(
             Repository.Result.Success(DOMAIN_ALBUMS, fromCache = false)
         ))
-        dao.verifyCalled("insertAlbums", listOf(DATABASE_ALBUMS))
+
+        val captorAlbum = argumentCaptor<List<DatabaseAlbum>>()
+        verify(albumDao).insertAlbums(captorAlbum.capture())
+        assertThat(captorAlbum.firstValue, equalTo(DATABASE_ALBUMS))
     }
 
     @Test
     fun `given the server replied with an invalid status code, when fetching data, the the status code will be reported`() {
         // given
-        val dao = AlbumDaoMock()
-        repository = Repository(
-            createRestApiStub { Response.error(404, ResponseBody.create(MediaType.parse(""), "")) },
-            dao
-        )
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Response.error(404, ResponseBody.create(MediaType.parse(""), "")))
 
         // when
         val result = repository.fetch()
@@ -44,15 +83,15 @@ class RepositoryTest {
         assertThat(result, equalTo(
             Repository.Result.Invalid(404)
         ))
-        dao.verifyNeverCalled("insertAlbums", listOf(DATABASE_ALBUMS))
+
+        verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
     }
 
     @Test
     fun `given the server timed out and there was not data in the cache, when fetching data, the the time out will be reported`() {
         // given
-        val dao = AlbumDaoMock()
-        dao.doWhenGetAlbumsSortedIsCalled = { listOf() }
-        repository = Repository(createRestApiStub { throw TimeoutException() }, dao)
+        whenever(albumRestApi.fetchAlbums()).thenThrow(TimeoutException())
+        whenever(albumDao.getAlbumsSorted()).thenReturn(listOf())
 
         // when
         val result = repository.fetch()
@@ -61,15 +100,14 @@ class RepositoryTest {
         assertThat(result, equalTo(
             Repository.Result.TimedOut
         ))
-        dao.verifyNeverCalled("insertAlbums", listOf(DATABASE_ALBUMS))
+        verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
     }
 
     @Test
     fun `given the server timed out and there was data in the cache, when fetching data, the cached data will be reported`() {
         // given
-        val dao = AlbumDaoMock()
-        dao.doWhenGetAlbumsSortedIsCalled = { DATABASE_ALBUMS }
-        repository = Repository(createRestApiStub { throw TimeoutException() }, dao)
+        whenever(albumRestApi.fetchAlbums()).thenThrow(TimeoutException())
+        whenever(albumDao.getAlbumsSorted()).thenReturn(DATABASE_ALBUMS)
 
         // when
         val result = repository.fetch()
@@ -78,14 +116,13 @@ class RepositoryTest {
         assertThat(result, equalTo(
             Repository.Result.Success(DOMAIN_ALBUMS, fromCache = true)
         ))
-        dao.verifyNeverCalled("insertAlbums", listOf(DATABASE_ALBUMS))
+        verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
     }
 
     @Test
     fun `given the server was not reachable, when fetching data, the no network will be reported`() {
         // given
-        val dao = AlbumDaoMock()
-        repository = Repository(createRestApiStub { throw IOException() }, dao)
+        whenever(albumRestApi.fetchAlbums()).thenThrow(IOException())
 
         // when
         val result = repository.fetch()
@@ -94,48 +131,7 @@ class RepositoryTest {
         assertThat(result, equalTo(
             Repository.Result.NoNetwork
         ))
-        dao.verifyNeverCalled("insertAlbums", listOf(DATABASE_ALBUMS))
-    }
-
-    private fun createRestApiStub(callback: () -> Response<List<NetworkAlbum>>): AlbumRestApi {
-        return object : AlbumRestApi {
-            override fun fetchAlbums(): Response<List<NetworkAlbum>> {
-                return callback()
-            }
-        }
-    }
-
-    data class Invocation(val method: String, val args: List<Any?> = listOf())
-
-    class AlbumDaoMock(private val relaxed: Boolean = false) : AlbumDao {
-        private val invocations = mutableListOf<Invocation>()
-
-        var doWhenGetAlbumsSortedIsCalled: () -> List<DatabaseAlbum> = {
-            relaxCheck()
-            listOf()
-        }
-
-        private fun relaxCheck() {
-            if (!relaxed) {
-                throw NotImplementedError()
-            }
-        }
-
-        override fun getAlbumsSorted(): List<DatabaseAlbum> {
-            invocations.add(Invocation("getAlbumsSorted"))
-            return doWhenGetAlbumsSortedIsCalled()
-        }
-
-        override fun insertAlbums(albums: List<DatabaseAlbum>) {
-            invocations.add(Invocation("insertAlbums", listOf<Any?>(albums)))
-        }
-
-        fun verifyCalled(method: String, args: List<Any?> = listOf(), times: Int = 1) {
-            val invocation = Invocation(method, args)
-            assertThat(invocations.filter { it == invocation }.size, equalTo(times))
-        }
-
-        fun verifyNeverCalled(method: String, args: List<Any?> = listOf(), times: Int = 1) = verifyCalled(method, args, 0)
+        verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
     }
 
     companion object {
@@ -165,6 +161,32 @@ class RepositoryTest {
             )
         )
 
+        val DATABASE_ALBUMS_USER1 = listOf(
+            DatabaseAlbum(
+                userId = 1,
+                id = 0,
+                title = "Album 1"
+            ),
+            DatabaseAlbum(
+                userId = 1,
+                id = 1,
+                title = "Album 2"
+            )
+        )
+
+        val DATABASE_ALBUMS_USER2 = listOf(
+            DatabaseAlbum(
+                userId = 2,
+                id = 0,
+                title = "Album 1"
+            ),
+            DatabaseAlbum(
+                userId = 2,
+                id = 1,
+                title = "Album 2"
+            )
+        )
+
         val DOMAIN_ALBUMS = listOf(
             Album(
                 userId = 0,
@@ -173,6 +195,31 @@ class RepositoryTest {
             ),
             Album(
                 userId = 0,
+                id = 1,
+                title = "Album 2"
+            )
+        )
+        val DOMAIN_ALBUMS_USER1 = listOf(
+            Album(
+                userId = 1,
+                id = 0,
+                title = "Album 1"
+            ),
+            Album(
+                userId = 1,
+                id = 1,
+                title = "Album 2"
+            )
+        )
+
+        val DOMAIN_ALBUMS_USER2 = listOf(
+            Album(
+                userId = 2,
+                id = 0,
+                title = "Album 1"
+            ),
+            Album(
+                userId = 2,
                 id = 1,
                 title = "Album 2"
             )

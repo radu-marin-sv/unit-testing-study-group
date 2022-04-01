@@ -34,6 +34,9 @@ interface AlbumDao {
 
     @Insert
     fun insertAlbums(albums: List<DatabaseAlbum>)
+
+    @Query("SELECT * from albums where user_id = :userId")
+    fun getAlbumByUserId(userId: Int): List<DatabaseAlbum>
 }
 
 @Database(exportSchema = false, version = 1, entities = [DatabaseAlbum::class])

@@ -53,4 +53,33 @@ class Repository(
             Result.NoNetwork
         }
     }
+
+    @WorkerThread
+    fun fetchOnlyFirst(): Result {
+        return try {
+            val persistedAlbums = dao.getAlbumsSorted()
+            if (persistedAlbums.isEmpty()) {
+                val response = restApi.fetchAlbums()
+                if (response.isSuccessful) {
+                    val domainAlbums = response.body()?.asDomainModels() ?: listOf()
+                    dao.insertAlbums(domainAlbums.asDatabaseModel())
+                    Result.Success(domainAlbums, fromCache = false)
+                } else {
+                    Result.Invalid(response.code())
+                }
+            } else {
+                Result.Success(persistedAlbums.asDomainModel(), fromCache = true)
+            }
+        } catch (exception: TimeoutException) {
+            Result.TimedOut
+        } catch (exception: IOException) {
+            Result.NoNetwork
+        }
+    }
+
+    @WorkerThread
+    fun fetchAlbumsByUserIdList(userIdList: List<Int>): Result {
+        val albumList =  userIdList.flatMap { dao.getAlbumByUserId(it) }.toList()
+        return Result.Success(albumList.asDomainModel(), fromCache = true)
+    }
 }
