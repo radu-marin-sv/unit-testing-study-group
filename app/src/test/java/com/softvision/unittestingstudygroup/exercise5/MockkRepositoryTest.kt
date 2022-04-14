@@ -1,49 +1,56 @@
 package com.softvision.unittestingstudygroup.exercise5
 
-import com.nhaarman.mockitokotlin2.*
+import io.mockk.*
+import io.mockk.impl.annotations.InjectMockKs
+import io.mockk.impl.annotations.MockK
 import okhttp3.MediaType
 import okhttp3.ResponseBody
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.MatcherAssert.assertThat
+import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.anyList
-import org.mockito.InjectMocks
-import org.mockito.Mock
-import org.mockito.junit.MockitoJUnitRunner
 import retrofit2.Response
 import java.io.IOException
 import java.util.concurrent.TimeoutException
 
-@RunWith(MockitoJUnitRunner::class)
-class RepositoryTest {
+class MockkRepositoryTest {
 
-    @Mock
+    @MockK
     private lateinit var albumRestApi: AlbumRestApi
-    @Mock
+    @MockK
     private lateinit var albumDao: AlbumDao
 
-    @InjectMocks
+    @InjectMockKs
     private lateinit var repository: Repository
+
+    @Before
+    fun setUp() {
+        MockKAnnotations.init(this, relaxUnitFun = true)
+    }
 
     @Test
     fun `given a server replied with data and we don't have nothing stored, when fetching data, then the fetch methods are called in expected order`() {
-        whenever(albumRestApi.fetchAlbums()).thenReturn(Response.success(NETWORK_ALBUMS))
+        every { albumRestApi.fetchAlbums() } returns Response.success(NETWORK_ALBUMS)
+        every { albumDao.getAlbumsSorted() } returns listOf()
+        justRun { albumDao.insertAlbums(any()) }
 
         repository.fetchOnlyFirst()
 
-        val fetchFirstOrder = inOrder(albumDao, albumRestApi)
-        fetchFirstOrder.verify(albumDao).getAlbumsSorted()
-        fetchFirstOrder.verify(albumRestApi).fetchAlbums()
-        fetchFirstOrder.verify(albumDao).insertAlbums(anyList())
+        verifySequence {
+            albumDao.getAlbumsSorted()
+            albumRestApi.fetchAlbums()
+            albumDao.insertAlbums(any())
+        }
+
+        confirmVerified(albumDao, albumRestApi)
     }
 
     @Test
     fun `given, when, then`() {
         // given
-        whenever(albumDao.getAlbumByUserId(any()))
-            .thenReturn(DATABASE_ALBUMS, DATABASE_ALBUMS_USER1, DATABASE_ALBUMS_USER2)
+        every { albumDao.getAlbumByUserId(any()) } returnsMany listOf(
+            DATABASE_ALBUMS, DATABASE_ALBUMS_USER1, DATABASE_ALBUMS_USER2
+        )
 
         // when
         val result = repository.fetchAlbumsByUserIdList(listOf(0, 1, 2))
@@ -55,8 +62,10 @@ class RepositoryTest {
 
     @Test
     fun `given the server replied with data, when fetching data, the the data will be successfully fetched`() {
+        val albumsSlot = slot<List<DatabaseAlbum>>()
+
         // given
-        whenever(albumRestApi.fetchAlbums()).thenReturn(Response.success(NETWORK_ALBUMS))
+        every {  albumRestApi.fetchAlbums() } returns Response.success(NETWORK_ALBUMS)
 
         // when
         val result = repository.fetch()
@@ -66,15 +75,14 @@ class RepositoryTest {
             Repository.Result.Success(DOMAIN_ALBUMS, fromCache = false)
         ))
 
-        val captorAlbum = argumentCaptor<List<DatabaseAlbum>>()
-        verify(albumDao).insertAlbums(captorAlbum.capture())
-        assertThat(captorAlbum.firstValue, equalTo(DATABASE_ALBUMS))
+        verify { albumDao.insertAlbums(capture(albumsSlot)) }
+        assertThat(albumsSlot.captured, equalTo(DATABASE_ALBUMS))
     }
 
     @Test
     fun `given the server replied with an invalid status code, when fetching data, the the status code will be reported`() {
         // given
-        whenever(albumRestApi.fetchAlbums()).thenReturn(Response.error(404, ResponseBody.create(MediaType.parse(""), "")))
+        every { albumRestApi.fetchAlbums() } returns Response.error(404, ResponseBody.create(MediaType.parse(""), ""))
 
         // when
         val result = repository.fetch()
@@ -84,14 +92,14 @@ class RepositoryTest {
             Repository.Result.Invalid(404)
         ))
 
-        verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
+        verify(exactly = 0) { albumDao.insertAlbums(any()) }
     }
 
     @Test
     fun `given the server timed out and there was not data in the cache, when fetching data, the the time out will be reported`() {
         // given
-        whenever(albumRestApi.fetchAlbums()).thenThrow(TimeoutException())
-        whenever(albumDao.getAlbumsSorted()).thenReturn(listOf())
+        every { albumRestApi.fetchAlbums() } throws TimeoutException()
+        every { albumDao.getAlbumsSorted() } returns listOf()
 
         // when
         val result = repository.fetch()
@@ -100,14 +108,15 @@ class RepositoryTest {
         assertThat(result, equalTo(
             Repository.Result.TimedOut
         ))
-        verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
+
+        verify(exactly = 0) { albumDao.insertAlbums(any()) }
     }
 
     @Test
     fun `given the server timed out and there was data in the cache, when fetching data, the cached data will be reported`() {
         // given
-        whenever(albumRestApi.fetchAlbums()).thenThrow(TimeoutException())
-        whenever(albumDao.getAlbumsSorted()).thenReturn(DATABASE_ALBUMS)
+        every { albumRestApi.fetchAlbums() } throws TimeoutException()
+        every { albumDao.getAlbumsSorted() } returns DATABASE_ALBUMS
 
         // when
         val result = repository.fetch()
@@ -116,13 +125,13 @@ class RepositoryTest {
         assertThat(result, equalTo(
             Repository.Result.Success(DOMAIN_ALBUMS, fromCache = true)
         ))
-        verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
+        verify(exactly = 0) { albumDao.insertAlbums(any()) }
     }
 
     @Test
     fun `given the server was not reachable, when fetching data, the no network will be reported`() {
         // given
-        whenever(albumRestApi.fetchAlbums()).thenThrow(IOException())
+        every { albumRestApi.fetchAlbums() } throws IOException()
 
         // when
         val result = repository.fetch()
@@ -131,7 +140,7 @@ class RepositoryTest {
         assertThat(result, equalTo(
             Repository.Result.NoNetwork
         ))
-        verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
+        verify(exactly = 0) { albumDao.insertAlbums(any()) }
     }
 
     companion object {
