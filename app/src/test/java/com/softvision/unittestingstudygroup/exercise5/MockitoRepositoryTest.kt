@@ -12,6 +12,7 @@ import org.mockito.ArgumentMatchers.anyList
 import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.junit.MockitoJUnitRunner
+import retrofit2.Call
 import retrofit2.Response
 import java.io.IOException
 import java.util.concurrent.TimeoutException
@@ -29,7 +30,9 @@ class MockitoRepositoryTest {
 
     @Test
     fun `given a server replied with data and we don't have nothing stored, when fetching data, then the fetch methods are called in expected order`() {
-        whenever(albumRestApi.fetchAlbums()).thenReturn(Response.success(NETWORK_ALBUMS))
+        val callable: Call<List<NetworkAlbum>> = mock()
+        whenever(callable.execute()).thenReturn(Response.success(NETWORK_ALBUMS))
+        whenever(albumRestApi.fetchAlbums()).thenReturn(callable)
 
         repository.fetchOnlyFirst()
 
@@ -56,7 +59,9 @@ class MockitoRepositoryTest {
     @Test
     fun `given the server replied with data, when fetching data, the the data will be successfully fetched`() {
         // given
-        whenever(albumRestApi.fetchAlbums()).thenReturn(Response.success(NETWORK_ALBUMS))
+        val callable: Call<List<NetworkAlbum>> = mock()
+        whenever(callable.execute()).thenReturn(Response.success(NETWORK_ALBUMS))
+        whenever(albumRestApi.fetchAlbums()).thenReturn(callable)
 
         // when
         val result = repository.fetch()
@@ -74,7 +79,9 @@ class MockitoRepositoryTest {
     @Test
     fun `given the server replied with an invalid status code, when fetching data, the the status code will be reported`() {
         // given
-        whenever(albumRestApi.fetchAlbums()).thenReturn(Response.error(404, ResponseBody.create(MediaType.parse(""), "")))
+        val callable: Call<List<NetworkAlbum>> = mock()
+        whenever(callable.execute()).thenReturn(Response.error(404, ResponseBody.create(MediaType.parse(""), "")))
+        whenever(albumRestApi.fetchAlbums()).thenReturn(callable)
 
         // when
         val result = repository.fetch()

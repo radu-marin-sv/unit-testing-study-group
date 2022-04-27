@@ -12,8 +12,10 @@ data class Album(
 )
 
 class RepositoryFactory {
-    fun create(context: Context): Repository {
-        return Repository(network, AlbumDatabase.getInstance(context).getAlbumDao())
+    companion object {
+        fun create(context: Context): Repository {
+            return Repository(network, AlbumDatabase.getInstance(context).getAlbumDao())
+        }
     }
 }
 
@@ -34,7 +36,7 @@ class Repository(
     @WorkerThread
     fun fetch(): Result {
         return try {
-            val response = restApi.fetchAlbums()
+            val response = restApi.fetchAlbums().execute()
             if (response.isSuccessful) {
                 val domainAlbums = response.body()?.asDomainModels() ?: listOf()
                 dao.insertAlbums(domainAlbums.asDatabaseModel())
@@ -59,7 +61,7 @@ class Repository(
         return try {
             val persistedAlbums = dao.getAlbumsSorted()
             if (persistedAlbums.isEmpty()) {
-                val response = restApi.fetchAlbums()
+                val response = restApi.fetchAlbums().execute()
                 if (response.isSuccessful) {
                     val domainAlbums = response.body()?.asDomainModels() ?: listOf()
                     dao.insertAlbums(domainAlbums.asDatabaseModel())

@@ -30,7 +30,7 @@ class MockkRepositoryTest {
 
     @Test
     fun `given a server replied with data and we don't have nothing stored, when fetching data, then the fetch methods are called in expected order`() {
-        every { albumRestApi.fetchAlbums() } returns Response.success(NETWORK_ALBUMS)
+        every { albumRestApi.fetchAlbums().execute() } returns Response.success(NETWORK_ALBUMS)
         every { albumDao.getAlbumsSorted() } returns listOf()
         justRun { albumDao.insertAlbums(any()) }
 
@@ -65,7 +65,7 @@ class MockkRepositoryTest {
         val albumsSlot = slot<List<DatabaseAlbum>>()
 
         // given
-        every {  albumRestApi.fetchAlbums() } returns Response.success(NETWORK_ALBUMS)
+        every {  albumRestApi.fetchAlbums().execute() } returns Response.success(NETWORK_ALBUMS)
 
         // when
         val result = repository.fetch()
@@ -82,7 +82,7 @@ class MockkRepositoryTest {
     @Test
     fun `given the server replied with an invalid status code, when fetching data, the the status code will be reported`() {
         // given
-        every { albumRestApi.fetchAlbums() } returns Response.error(404, ResponseBody.create(MediaType.parse(""), ""))
+        every { albumRestApi.fetchAlbums().execute() } returns Response.error(404, ResponseBody.create(MediaType.parse(""), ""))
 
         // when
         val result = repository.fetch()

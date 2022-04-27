@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Unit Testing Study Group</string>
+    <!-- Error messages -->
+    <string name="client_problem">There seems to be a problem with the app</string>
+    <string name="server_problem">There seems to be a problem with the server</string>
+    <string name="unknown_problem">We don\'t know what the problem is</string>
+    <string name="no_internet">There was a problem with the Internet connection</string>
+    <string name="cached_data">We\'re showing you probably stale data</string>
 </resources>

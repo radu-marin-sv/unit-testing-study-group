@@ -32,7 +32,7 @@ interface AlbumDao {
     @Query("SELECT * from albums order by title asc")
     fun getAlbumsSorted(): List<DatabaseAlbum>
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertAlbums(albums: List<DatabaseAlbum>)
 
     @Query("SELECT * from albums where user_id = :userId")

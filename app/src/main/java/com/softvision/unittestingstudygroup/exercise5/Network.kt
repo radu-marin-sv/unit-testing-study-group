@@ -27,7 +27,7 @@ fun List<NetworkAlbum>.asDomainModels(): List<Album> {
 interface AlbumRestApi {
     @GET("albums")
     @Throws(TimeoutException::class, IOException::class)
-    fun fetchAlbums(): Response<List<NetworkAlbum>>
+    fun fetchAlbums(): Call<List<NetworkAlbum>>
 }
 
 private const val BASE_URL = "https://jsonplaceholder.typicode.com/"
