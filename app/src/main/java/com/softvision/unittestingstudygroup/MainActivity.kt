@@ -12,10 +12,13 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.softvision.unittestingstudygroup.exercise5.Album
+import com.softvision.unittestingstudygroup.exercise5.MyViewModel
 import kotlinx.android.synthetic.main.activity_main.*
 
 
 class MainActivity : AppCompatActivity() {
+    private val viewModel: MyViewModel by viewModels { MyViewModel.Factory(this) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -23,15 +26,22 @@ class MainActivity : AppCompatActivity() {
         val adapter = AlbumAdapter()
 
         albums.adapter = adapter
-        //TODO: submit items into adapter
 
-        refresh.setOnRefreshListener {
-            //TODO: refresh albums list
+        viewModel.albums.observe(this) {
+            adapter.submitList(it)
         }
 
-        //TODO: show isRefreshing
+        refresh.setOnRefreshListener {
+            viewModel.refresh()
+        }
 
-        //TODO: show toast with error messages
+        viewModel.isRefreshing.observe(this) {
+            refresh.isRefreshing = it
+        }
+
+        viewModel.error.observe(this) {
+            Toast.makeText(this, getString(it), Toast.LENGTH_SHORT).show()
+        }
     }
 }
 

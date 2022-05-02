@@ -2,7 +2,6 @@ package com.softvision.unittestingstudygroup.exercise5
 
 import android.content.Context
 import androidx.room.*
-import androidx.room.Database
 
 @Entity(tableName = "albums")
 data class DatabaseAlbum(
