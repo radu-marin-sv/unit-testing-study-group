@@ -3,6 +3,7 @@ package com.softvision.unittestingstudygroup.exercise5
 import com.squareup.moshi.Json
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import io.reactivex.rxjava3.core.Single
 import retrofit2.Call
 import retrofit2.Response
 import retrofit2.Retrofit
@@ -27,7 +28,7 @@ fun List<NetworkAlbum>.asDomainModels(): List<Album> {
 interface AlbumRestApi {
     @GET("albums")
     @Throws(TimeoutException::class, IOException::class)
-    fun fetchAlbums(): Call<List<NetworkAlbum>>
+    fun fetchAlbums(): Single<List<NetworkAlbum>>
 }
 
 private const val BASE_URL = "https://jsonplaceholder.typicode.com/"

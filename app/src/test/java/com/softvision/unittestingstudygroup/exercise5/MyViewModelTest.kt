@@ -8,6 +8,11 @@ import io.mockk.every
 import io.mockk.impl.annotations.InjectMockKs
 import io.mockk.impl.annotations.MockK
 import io.mockk.verifySequence
+import io.reactivex.rxjava3.android.plugins.RxAndroidPlugins
+import io.reactivex.rxjava3.core.Single
+import io.reactivex.rxjava3.plugins.RxJavaPlugins
+import io.reactivex.rxjava3.schedulers.Schedulers
+import io.reactivex.rxjava3.schedulers.TestScheduler
 import org.junit.Assert.*
 
 import org.junit.After
@@ -15,6 +20,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.Mock
+import java.util.concurrent.TimeUnit
 
 class MyViewModelTest {
     @MockK
@@ -38,6 +44,7 @@ class MyViewModelTest {
     @Before
     fun setUp() {
         MockKAnnotations.init(this)
+        RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
 
         every { executors.io.execute(any()) } answers { (it.invocation.args[0] as Runnable).run() }
         every { executors.main.execute(any()) } answers { (it.invocation.args[0] as Runnable).run() }
@@ -55,13 +62,42 @@ class MyViewModelTest {
     @Test
     fun `given we successfully fetched data from the server, when refreshing, then the UI will display the list`() {
         // given
-        every { repository.fetch() } returns Repository.Result.Success(
-            albums = DOMAIN_ALBUMS,
-            fromCache = false
+        every { repository.fetch() } returns Single.just(
+            Repository.Result.Success(
+                albums = DOMAIN_ALBUMS,
+                fromCache = false
+            )
         )
 
         // when
         viewModel.refresh()
+
+        // then
+        verifySequence {
+            isRefreshingObserver.onChanged(true)
+            albumsObserver.onChanged(DOMAIN_ALBUMS)
+            isRefreshingObserver.onChanged(false)
+        }
+        confirmVerified(albumsObserver, isRefreshingObserver)
+    }
+
+    @Test
+    fun `given we successfully fetched data from the server, when refreshing with delay, then the UI will display the list`() {
+        // given
+        val testScheduler = TestScheduler()
+        RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+        RxJavaPlugins.setComputationSchedulerHandler { testScheduler }
+        every { repository.fetch() } returns Single.just(
+            Repository.Result.Success(
+                albums = DOMAIN_ALBUMS,
+                fromCache = false
+            )
+        )
+
+        // when
+        viewModel.refreshWithDelay()
+
+        testScheduler.advanceTimeBy(30, TimeUnit.SECONDS)
 
         // then
         verifySequence {

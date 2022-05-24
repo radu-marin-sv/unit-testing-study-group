@@ -2,6 +2,8 @@ package com.softvision.unittestingstudygroup.exercise5
 
 import android.content.Context
 import androidx.room.*
+import io.reactivex.rxjava3.core.Completable
+import io.reactivex.rxjava3.core.Single
 
 @Entity(tableName = "albums")
 data class DatabaseAlbum(
@@ -29,13 +31,13 @@ fun List<DatabaseAlbum>.asDomainModel(): List<Album> {
 @Dao
 interface AlbumDao {
     @Query("SELECT * from albums order by title asc")
-    fun getAlbumsSorted(): List<DatabaseAlbum>
+    fun getAlbumsSorted(): Single<List<DatabaseAlbum>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertAlbums(albums: List<DatabaseAlbum>)
+    fun insertAlbums(albums: List<DatabaseAlbum>): Completable
 
     @Query("SELECT * from albums where user_id = :userId")
-    fun getAlbumByUserId(userId: Int): List<DatabaseAlbum>
+    fun getAlbumByUserId(userId: Int): Single<List<DatabaseAlbum>>
 }
 
 @Database(exportSchema = false, version = 1, entities = [DatabaseAlbum::class])

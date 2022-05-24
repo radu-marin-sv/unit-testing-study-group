@@ -6,6 +6,9 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.softvision.unittestingstudygroup.R
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import io.reactivex.rxjava3.schedulers.Schedulers
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 class MyViewModel(
@@ -26,16 +29,58 @@ class MyViewModel(
         get() = _error
 
     fun refresh() {
-        executors.io.execute {
-            _isRefreshing.postValue(true)
-            when (val result = repository.fetch()) {
-                is Repository.Result.Success -> handleSuccess(result.albums, result.fromCache)
-                Repository.Result.TimedOut -> handleTimeout()
-                is Repository.Result.Invalid -> handleInvalid(result.statusCode)
-                Repository.Result.NoNetwork -> handleTimeout()
+//        executors.io.execute {
+//            _isRefreshing.postValue(true)
+//            when (val result = repository.fetch()) {
+//                is Repository.Result.Success -> handleSuccess(result.albums, result.fromCache)
+//                Repository.Result.TimedOut -> handleTimeout()
+//                is Repository.Result.Invalid -> handleInvalid(result.statusCode)
+//                Repository.Result.NoNetwork -> handleTimeout()
+//            }
+//            _isRefreshing.postValue(false)
+//        }
+        repository.fetch()
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .doOnSubscribe {_isRefreshing.postValue(true) }
+            .doAfterTerminate { _isRefreshing.postValue(false) }
+            .doOnSuccess {
+                when (it) {
+                    is Repository.Result.Success -> handleSuccess(it.albums, it.fromCache)
+                    Repository.Result.TimedOut -> handleTimeout()
+                    is Repository.Result.Invalid -> handleInvalid(it.statusCode)
+                    Repository.Result.NoNetwork -> handleTimeout()
+                }
             }
-            _isRefreshing.postValue(false)
-        }
+            .subscribe(
+                {},
+                {
+
+                }
+            )
+    }
+
+    fun refreshWithDelay() {
+        repository.fetch()
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .delay(30, TimeUnit.SECONDS)
+            .doOnSubscribe {_isRefreshing.postValue(true) }
+            .doAfterTerminate { _isRefreshing.postValue(false) }
+            .doOnSuccess {
+                when (it) {
+                    is Repository.Result.Success -> handleSuccess(it.albums, it.fromCache)
+                    Repository.Result.TimedOut -> handleTimeout()
+                    is Repository.Result.Invalid -> handleInvalid(it.statusCode)
+                    Repository.Result.NoNetwork -> handleTimeout()
+                }
+            }
+            .subscribe(
+                {},
+                {
+
+                }
+            )
     }
 
     private fun handleSuccess(albums: List<Album>, fromCache: Boolean) {

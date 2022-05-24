@@ -1,6 +1,7 @@
 package com.softvision.unittestingstudygroup.exercise5
 
 import com.nhaarman.mockitokotlin2.*
+import io.reactivex.rxjava3.core.Single
 import okhttp3.MediaType
 import okhttp3.ResponseBody
 import org.hamcrest.CoreMatchers.equalTo
@@ -12,7 +13,7 @@ import org.mockito.ArgumentMatchers.anyList
 import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.junit.MockitoJUnitRunner
-import retrofit2.Call
+import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
 import java.util.concurrent.TimeoutException
@@ -30,11 +31,10 @@ class MockitoRepositoryTest {
 
     @Test
     fun `given a server replied with data and we don't have nothing stored, when fetching data, then the fetch methods are called in expected order`() {
-        val callable: Call<List<NetworkAlbum>> = mock()
-        whenever(callable.execute()).thenReturn(Response.success(NETWORK_ALBUMS))
-        whenever(albumRestApi.fetchAlbums()).thenReturn(callable)
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Single.just(NETWORK_ALBUMS))
+        whenever(albumDao.getAlbumsSorted()).thenReturn(Single.just(listOf()))
 
-        repository.fetchOnlyFirst()
+        repository.fetchOnlyFirst().test()
 
         val fetchFirstOrder = inOrder(albumDao, albumRestApi)
         fetchFirstOrder.verify(albumDao).getAlbumsSorted()
@@ -46,50 +46,54 @@ class MockitoRepositoryTest {
     fun `given, when, then`() {
         // given
         whenever(albumDao.getAlbumByUserId(any()))
-            .thenReturn(DATABASE_ALBUMS, DATABASE_ALBUMS_USER1, DATABASE_ALBUMS_USER2)
+            .thenReturn(
+                Single.just(DATABASE_ALBUMS),
+                Single.just(DATABASE_ALBUMS_USER1),
+                Single.just(DATABASE_ALBUMS_USER2)
+            )
 
         // when
-        val result = repository.fetchAlbumsByUserIdList(listOf(0, 1, 2))
+        val testObserver = repository.fetchAlbumsByUserIdList(listOf(0, 1, 2)).test()
 
         // then
         val albumList =listOf(DOMAIN_ALBUMS, DOMAIN_ALBUMS_USER1, DOMAIN_ALBUMS_USER2).flatten()
-        assertThat(result, equalTo(Repository.Result.Success(albumList, true)))
+//        assertThat(testObserver, equalTo(Repository.Result.Success(albumList, true)))
+        testObserver
+            .assertValue(Repository.Result.Success(albumList, true))
+            .assertComplete()
+            .assertNoErrors()
     }
 
     @Test
     fun `given the server replied with data, when fetching data, the the data will be successfully fetched`() {
         // given
-        val callable: Call<List<NetworkAlbum>> = mock()
-        whenever(callable.execute()).thenReturn(Response.success(NETWORK_ALBUMS))
-        whenever(albumRestApi.fetchAlbums()).thenReturn(callable)
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Single.just(NETWORK_ALBUMS))
 
         // when
-        val result = repository.fetch()
+        val testObserver = repository.fetch().test()
 
         // then
-        assertThat(result, equalTo(
-            Repository.Result.Success(DOMAIN_ALBUMS, fromCache = false)
-        ))
-
         val captorAlbum = argumentCaptor<List<DatabaseAlbum>>()
         verify(albumDao).insertAlbums(captorAlbum.capture())
         assertThat(captorAlbum.firstValue, equalTo(DATABASE_ALBUMS))
+
+        testObserver
+            .assertComplete()
+            .assertNoErrors()
+            .assertValue(Repository.Result.Success(DOMAIN_ALBUMS, fromCache = false))
     }
 
     @Test
     fun `given the server replied with an invalid status code, when fetching data, the the status code will be reported`() {
         // given
-        val callable: Call<List<NetworkAlbum>> = mock()
-        whenever(callable.execute()).thenReturn(Response.error(404, ResponseBody.create(MediaType.parse(""), "")))
-        whenever(albumRestApi.fetchAlbums()).thenReturn(callable)
+        val error = Response.error<String>(404, ResponseBody.create(MediaType.parse(""), ""))
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Single.error(HttpException(error)))
 
         // when
-        val result = repository.fetch()
+        val testObserver = repository.fetch().test()
 
         // then
-        assertThat(result, equalTo(
-            Repository.Result.Invalid(404)
-        ))
+        testObserver.assertValue(Repository.Result.Invalid(404))
 
         verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
     }
@@ -97,47 +101,58 @@ class MockitoRepositoryTest {
     @Test
     fun `given the server timed out and there was not data in the cache, when fetching data, the the time out will be reported`() {
         // given
-        whenever(albumRestApi.fetchAlbums()).thenThrow(TimeoutException())
-        whenever(albumDao.getAlbumsSorted()).thenReturn(listOf())
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Single.error(TimeoutException()))
+        whenever(albumDao.getAlbumsSorted()).thenReturn(Single.just(listOf()))
 
         // when
-        val result = repository.fetch()
+        val testObserver = repository.fetch().test()
 
         // then
-        assertThat(result, equalTo(
-            Repository.Result.TimedOut
-        ))
+        testObserver.assertValue( Repository.Result.TimedOut)
         verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
     }
 
     @Test
     fun `given the server timed out and there was data in the cache, when fetching data, the cached data will be reported`() {
         // given
-        whenever(albumRestApi.fetchAlbums()).thenThrow(TimeoutException())
-        whenever(albumDao.getAlbumsSorted()).thenReturn(DATABASE_ALBUMS)
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Single.error(TimeoutException()))
+        whenever(albumDao.getAlbumsSorted()).thenReturn(Single.just(DATABASE_ALBUMS))
 
         // when
-        val result = repository.fetch()
+        val testObserver = repository.fetch().test()
 
         // then
-        assertThat(result, equalTo(
-            Repository.Result.Success(DOMAIN_ALBUMS, fromCache = true)
-        ))
+        testObserver.assertValue( Repository.Result.Success(DOMAIN_ALBUMS, fromCache = true))
         verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
     }
 
     @Test
     fun `given the server was not reachable, when fetching data, the no network will be reported`() {
         // given
-        whenever(albumRestApi.fetchAlbums()).thenThrow(IOException())
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Single.error(IOException()))
 
         // when
-        val result = repository.fetch()
+        val testObserver = repository.fetch().test()
 
         // then
-        assertThat(result, equalTo(
-            Repository.Result.NoNetwork
-        ))
+        testObserver.assertValue(Repository.Result.NoNetwork)
+        verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
+    }
+
+    @Test
+    fun `given the server throws and error, when fetching data, the no network will be reported`() {
+        // given
+        whenever(albumRestApi.fetchAlbums()).thenReturn(Single.error(IllegalArgumentException()))
+
+        // when
+        val testObserver = repository.fetch().test()
+
+        // then
+        testObserver
+            .assertError(IllegalArgumentException::class.java)
+            .assertNotComplete()
+            .assertNoValues()
+
         verify(albumDao, never()).insertAlbums(ArgumentMatchers.anyList())
     }
 
