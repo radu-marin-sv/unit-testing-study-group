@@ -1,10 +1,17 @@
 package com.softvision.unittestingstudygroup.exercise5
 
 import com.nhaarman.mockitokotlin2.*
+import com.softvision.unittestingstudygroup.DispatcherProvider
+import com.softvision.unittestingstudygroup.TestDispatcherProvider
+import com.softvision.unittestingstudygroup.ThreadingExtension
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runBlockingTest
 import okhttp3.MediaType
 import okhttp3.ResponseBody
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.MatcherAssert.assertThat
+import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentMatchers
@@ -17,6 +24,7 @@ import retrofit2.Response
 import java.io.IOException
 import java.util.concurrent.TimeoutException
 
+@ExperimentalCoroutinesApi
 @RunWith(MockitoJUnitRunner::class)
 class MockitoRepositoryTest {
 
@@ -25,14 +33,27 @@ class MockitoRepositoryTest {
     @Mock
     private lateinit var albumDao: AlbumDao
 
+    @Mock
+    private lateinit var dispatcherProvider: DispatcherProvider
+
     @InjectMocks
     private lateinit var repository: Repository
 
+    @get:Rule
+    val mainCoroutineDispatcher = ThreadingExtension()
+
+    @Before
+    fun setup() {
+        whenever(dispatcherProvider.io).thenReturn(mainCoroutineDispatcher.testDispatcherProvider.io)
+        whenever(dispatcherProvider.default).thenReturn(mainCoroutineDispatcher.testDispatcherProvider.default)
+    }
+
     @Test
-    fun `given a server replied with data and we don't have nothing stored, when fetching data, then the fetch methods are called in expected order`() {
+    fun `given a server replied with data and we don't have nothing stored, when fetching data, then the fetch methods are called in expected order`() = runBlockingTest {
         val callable: Call<List<NetworkAlbum>> = mock()
         whenever(callable.execute()).thenReturn(Response.success(NETWORK_ALBUMS))
         whenever(albumRestApi.fetchAlbums()).thenReturn(callable)
+        whenever(albumDao.getAlbumsSorted()).thenReturn(emptyList())
 
         repository.fetchOnlyFirst()
 
@@ -43,7 +64,7 @@ class MockitoRepositoryTest {
     }
 
     @Test
-    fun `given, when, then`() {
+    fun `given, when, then`() = runBlockingTest {
         // given
         whenever(albumDao.getAlbumByUserId(any()))
             .thenReturn(DATABASE_ALBUMS, DATABASE_ALBUMS_USER1, DATABASE_ALBUMS_USER2)
@@ -57,7 +78,7 @@ class MockitoRepositoryTest {
     }
 
     @Test
-    fun `given the server replied with data, when fetching data, the the data will be successfully fetched`() {
+    fun `given the server replied with data, when fetching data, the the data will be successfully fetched`() = runBlockingTest {
         // given
         val callable: Call<List<NetworkAlbum>> = mock()
         whenever(callable.execute()).thenReturn(Response.success(NETWORK_ALBUMS))
@@ -77,7 +98,7 @@ class MockitoRepositoryTest {
     }
 
     @Test
-    fun `given the server replied with an invalid status code, when fetching data, the the status code will be reported`() {
+    fun `given the server replied with an invalid status code, when fetching data, the the status code will be reported`() = runBlockingTest {
         // given
         val callable: Call<List<NetworkAlbum>> = mock()
         whenever(callable.execute()).thenReturn(Response.error(404, ResponseBody.create(MediaType.parse(""), "")))
@@ -95,7 +116,7 @@ class MockitoRepositoryTest {
     }
 
     @Test
-    fun `given the server timed out and there was not data in the cache, when fetching data, the the time out will be reported`() {
+    fun `given the server timed out and there was not data in the cache, when fetching data, the the time out will be reported`() = runBlockingTest {
         // given
         whenever(albumRestApi.fetchAlbums()).thenThrow(TimeoutException())
         whenever(albumDao.getAlbumsSorted()).thenReturn(listOf())
@@ -111,7 +132,7 @@ class MockitoRepositoryTest {
     }
 
     @Test
-    fun `given the server timed out and there was data in the cache, when fetching data, the cached data will be reported`() {
+    fun `given the server timed out and there was data in the cache, when fetching data, the cached data will be reported`() = runBlockingTest {
         // given
         whenever(albumRestApi.fetchAlbums()).thenThrow(TimeoutException())
         whenever(albumDao.getAlbumsSorted()).thenReturn(DATABASE_ALBUMS)
@@ -127,7 +148,7 @@ class MockitoRepositoryTest {
     }
 
     @Test
-    fun `given the server was not reachable, when fetching data, the no network will be reported`() {
+    fun `given the server was not reachable, when fetching data, the no network will be reported`() = runBlockingTest {
         // given
         whenever(albumRestApi.fetchAlbums()).thenThrow(IOException())
 

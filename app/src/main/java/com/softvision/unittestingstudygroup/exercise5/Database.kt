@@ -29,13 +29,13 @@ fun List<DatabaseAlbum>.asDomainModel(): List<Album> {
 @Dao
 interface AlbumDao {
     @Query("SELECT * from albums order by title asc")
-    fun getAlbumsSorted(): List<DatabaseAlbum>
+    suspend fun getAlbumsSorted(): List<DatabaseAlbum>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertAlbums(albums: List<DatabaseAlbum>)
+    suspend fun insertAlbums(albums: List<DatabaseAlbum>)
 
     @Query("SELECT * from albums where user_id = :userId")
-    fun getAlbumByUserId(userId: Int): List<DatabaseAlbum>
+    suspend fun getAlbumByUserId(userId: Int): List<DatabaseAlbum>
 }
 
 @Database(exportSchema = false, version = 1, entities = [DatabaseAlbum::class])

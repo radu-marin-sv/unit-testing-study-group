@@ -2,12 +2,11 @@ package com.softvision.unittestingstudygroup.exercise5
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.Observer
-import io.mockk.MockKAnnotations
-import io.mockk.confirmVerified
-import io.mockk.every
+import com.softvision.unittestingstudygroup.ThreadingExtension
+import io.mockk.*
 import io.mockk.impl.annotations.InjectMockKs
 import io.mockk.impl.annotations.MockK
-import io.mockk.verifySequence
+import kotlinx.coroutines.test.runBlockingTest
 import org.junit.Assert.*
 
 import org.junit.After
@@ -35,6 +34,9 @@ class MyViewModelTest {
     @get:Rule
     val instantRule = InstantTaskExecutorRule()
 
+    @get:Rule
+    val mainCoroutineDispatcher = ThreadingExtension()
+
     @Before
     fun setUp() {
         MockKAnnotations.init(this)
@@ -53,9 +55,9 @@ class MyViewModelTest {
     }
 
     @Test
-    fun `given we successfully fetched data from the server, when refreshing, then the UI will display the list`() {
+    fun `given we successfully fetched data from the server, when refreshing, then the UI will display the list`() = runBlockingTest {
         // given
-        every { repository.fetch() } returns Repository.Result.Success(
+        coEvery { repository.fetch() } returns Repository.Result.Success(
             albums = DOMAIN_ALBUMS,
             fromCache = false
         )
@@ -64,7 +66,7 @@ class MyViewModelTest {
         viewModel.refresh()
 
         // then
-        verifySequence {
+        coVerifySequence {
             isRefreshingObserver.onChanged(true)
             albumsObserver.onChanged(DOMAIN_ALBUMS)
             isRefreshingObserver.onChanged(false)
